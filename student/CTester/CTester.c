@@ -137,10 +137,22 @@ void fpe_handler(int sig, siginfo_t *unused, void *unused2)
     siglongjmp(segv_jmp, 1);
 }
 
+bool write_stdout_failed_again()
+{
+    return (stats.write.last_return == -1
+            && (stats.write.last_params.fd == STDOUT_FILENO
+                || stats.write.last_params.fd == STDERR_FILENO)
+            && stats.write.last_errno == EAGAIN);
+}
+
 void alarm_handler(int sig, siginfo_t *unused, void *unused2)
 {
     wrap_monitoring = false;
-    push_info_msg(_("Your code exceeded the maximal allowed execution time."));
+    if (write_stdout_failed_again()) {
+        push_info_msg(_("Your code exceeded the maximum output size: try limiting the output, or fix a potential infinite loop."));
+    } else {
+        push_info_msg(_("Your code exceeded the maximal allowed execution time."));
+    }
     set_tag("timeout");
     wrap_monitoring = true;
     siglongjmp(segv_jmp, 1);
@@ -184,6 +196,7 @@ void sandbox_end()
 
     // ... and looking for a double free warning
     char buf[BUFSIZ];
+    memset(buf, 0, sizeof(buf)); // Initialize to prevent non-NULL-terminated strings
     int n;
     while ((n = read(pipe_stdout[0], buf, BUFSIZ)) > 0) {
         write(usr_pipe_stdout[1], buf, n);
@@ -230,9 +243,12 @@ void start_test()
     memset(&logs, 0, sizeof(logs));
 }
 
-int __real_exit(int status);
-int __wrap_exit(int status){
-    return status;
+void __real_exit(int status);
+
+void __wrap_exit(int status) {
+    printf("Coucou 2\n");
+    //__real_exit(status);
+    //return status;
 }
 
 int run_tests(int argc, char *argv[], void *tests[], int nb_tests) {
@@ -382,5 +398,7 @@ int run_tests(int argc, char *argv[], void *tests[], int nb_tests) {
     //CU_basic_run_tests();
     //CU_automated_run_tests();
     CU_cleanup_registry();
-    return CU_get_error();
+    int a;
+    printf("Goiedag %d\n", (a = CU_get_error()));
+    return a;
 }

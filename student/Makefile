@@ -1,14 +1,15 @@
 CC=gcc
 EXEC=tests
 LDFLAGS=-lcunit -lm -lpthread -ldl -rdynamic
-SRC=$(wildcard *.c) $(wildcard CTester/*.c)
+SRC=$(sort $(wildcard *.c)) $(sort $(wildcard CTester/*.c))
 OBJ=$(SRC:.c=.o)
-CFLAGS=-Wall -Werror -DC99 -std=gnu99 -ICTester -D_POSIX_C_SOURCE=200112L -D_DEFAULT_SOURCE
+CFLAGS=-Wall -Werror -DC99 -std=gnu99 -ICTester -D_POSIX_C_SOURCE=200112L -D_DEFAULT_SOURCE -g
 WRAP += -Wl,-wrap=exit
 WRAP += -Wl,-wrap=open -Wl,-wrap=creat -Wl,-wrap=close -Wl,-wrap=read -Wl,-wrap=write -Wl,-wrap=stat -Wl,-wrap=fstat -Wl,-wrap=lseek
 WRAP += -Wl,-wrap=getpid
 WRAP += -Wl,-wrap=malloc -Wl,-wrap=free -Wl,-wrap=realloc -Wl,-wrap=calloc
 WRAP += -Wl,-wrap=pthread_mutex_lock -Wl,-wrap=pthread_mutex_unlock -Wl,-wrap=pthread_mutex_trylock -Wl,-wrap=pthread_mutex_init -Wl,-wrap=pthread_mutex_destroy
+WRAP += -Wl,-wrap=getaddrinfo -Wl,-wrap=getnameinfo -Wl,-wrap=freeaddrinfo -Wl,-wrap=gai_strerror
 WRAP += -Wl,-wrap=sleep
 
 all: $(EXEC)

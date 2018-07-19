@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include "wrap.h"
 
@@ -24,6 +25,7 @@ extern struct wrap_stats_t stats;
 extern struct wrap_monitor_t monitored;
 extern struct wrap_fail_t failures;
 extern struct wrap_log_t logs;
+extern const int ALARM_FAIL_EXCEEDED_PIPE;
 
 int __wrap_open(char *pathname, int flags, mode_t mode) {
 
@@ -122,26 +124,40 @@ int __wrap_read(int fd, void *buf, size_t count){
 
 int __wrap_write(int fd, void *buf, size_t count){
 
-  if(!wrap_monitoring || !monitored.write) {
-    return __real_write(fd,buf,count); 
-  }
-  stats.write.called++;
-  stats.write.last_params.fd=fd;
-  stats.write.last_params.buf=buf;
-  stats.write.last_params.count=count;
-  
-  if (FAIL(failures.write)) {
-    failures.write=NEXT(failures.write);
-    errno=failures.write_errno;
-    stats.write.last_return=failures.write_ret;
-    return failures.write_ret;
-  }
-  failures.write=NEXT(failures.write);
-  // did not fail
-  int ret=__real_write(fd,buf,count);
-  stats.write.last_return=ret;
-  return ret;
+  if (!wrap_monitoring) {
+    return __real_write(fd, buf, count);
+  } // else: wrap_monitoring == true
+  if (monitored.write) {
+    stats.write.called++;
+    stats.write.last_params.fd = fd;
+    stats.write.last_params.buf = buf;
+    stats.write.last_params.count = count;
 
+    if (FAIL(failures.write)) {
+      failures.write = NEXT(failures.write);
+      errno = failures.write_errno;
+      stats.write.last_return = failures.write_ret;
+      stats.write.last_errno = errno;
+      return failures.write_ret;
+    }
+    // did not fail
+    failures.write = NEXT(failures.write);
+  }
+  int ret = __real_write(fd, buf, count);
+  if (monitored.write) {
+    stats.write.last_return = ret;
+    stats.write.last_errno = errno;
+  }
+  if (ret == -1 && errno == EAGAIN && (fd == STDOUT_FILENO || STDERR_FILENO)) {
+    // The caller has reached the capacity limit of the pipe used to buffer stdout and stderr:
+    // stop the program, as it is probably not normal (infinite loop or so)
+    stats.write.last_return = -1;
+    stats.write.last_params.fd = fd;
+    // buf and count are useless: if we need them, we have already recorded them.
+    stats.write.last_errno = EAGAIN;
+    raise(SIGALRM);
+  }
+  return ret;
 }
 
 int __wrap_stat(char *path, struct stat *buf) {
