@@ -50,10 +50,12 @@ int print_address(char *node, char *service)
     return 0;
 }
 
+void __real_exit(int status);
+
 void lol()
 {
-    //__real_exit(127);
-    exit(127);
+    printf("Hello\n");
+    __real_exit(127);
     printf("Salut\n");
 }
 

@@ -243,12 +243,25 @@ void start_test()
     memset(&logs, 0, sizeof(logs));
 }
 
+/**
+ * CTester functions should *never* call exit directly, but rather __real_exit;
+ * this prevents completely-undefined behaviour from arising in the correcter's program.
+ */
 void __real_exit(int status);
 
+/**
+ * The exit call is considered special by glibc and gcc:
+ * it considers that after such a call, everything that comes after it
+ * will never be executed normally, and therefore it doesn't bother
+ * adding code to perform a clean function return:
+ * the program will have undefined behaviour if this function,
+ * __wrap_exit, actually returns to the callee, and this may or may not end
+ * in a catchable segfault.
+ * If we accept the possibility of a student calling exit, then it is better
+ * to explicitly raise the segfault in order to have a less-undefined behaviour.
+ */
 void __wrap_exit(int status) {
-    printf("Coucou 2\n");
-    //__real_exit(status);
-    //return status;
+    raise(SIGSEGV); // raise SIGSEGV if it comes from the student.
 }
 
 int run_tests(int argc, char *argv[], void *tests[], int nb_tests) {
@@ -293,6 +306,7 @@ int run_tests(int argc, char *argv[], void *tests[], int nb_tests) {
         .ss_sp = stack,
     };
 
+    //sa.sa_flags     = SA_NODEFER|SA_ONSTACK|SA_RESTART|SA_SIGINFO;
     sa.sa_flags     = SA_NODEFER|SA_ONSTACK|SA_RESTART;
     sa.sa_sigaction = segv_handler;
     sigaltstack(&ss, 0);
@@ -304,6 +318,10 @@ int run_tests(int argc, char *argv[], void *tests[], int nb_tests) {
     ret = sigaction(SIGFPE, &sa, NULL);
     if (ret)
         return ret;
+    /*sa.sa_sigaction = trap_handler;
+    ret = sigaction(SIGTRAP, &sa, NULL);
+    if (ret)
+        return ret;*/
     sa.sa_sigaction = alarm_handler;
     ret = sigaction(SIGALRM, &sa, NULL);
     if (ret)
@@ -359,12 +377,12 @@ int run_tests(int argc, char *argv[], void *tests[], int nb_tests) {
         if (ret < 0)
             return ret;
 
-        for(int i=0; i < test_metadata.nb_tags; i++) {
-            ret = fprintf(f_out, "%s", test_metadata.tags[i]);
+        for(int j=0; j < test_metadata.nb_tags; j++) {
+            ret = fprintf(f_out, "%s", test_metadata.tags[j]);
             if (ret < 0)
                 return ret;
 
-            if (i != test_metadata.nb_tags - 1) {
+            if (j != test_metadata.nb_tags - 1) {
                 ret = fprintf(f_out, ",");
                 if (ret < 0)
                     return ret;
