@@ -137,10 +137,22 @@ void fpe_handler(int sig, siginfo_t *unused, void *unused2)
     siglongjmp(segv_jmp, 1);
 }
 
+bool write_stdout_failed_again()
+{
+    return (stats.write.last_return == -1
+            && (stats.write.last_params.fd == STDOUT_FILENO
+                || stats.write.last_params.fd == STDERR_FILENO)
+            && stats.write.last_errno == EAGAIN);
+}
+
 void alarm_handler(int sig, siginfo_t *unused, void *unused2)
 {
     wrap_monitoring = false;
-    push_info_msg(_("Your code exceeded the maximal allowed execution time."));
+    if (write_stdout_failed_again()) {
+        push_info_msg(_("Your code exceeded the maximum output size: try limiting the output, or fix a potential infinite loop."));
+    } else {
+        push_info_msg(_("Your code exceeded the maximal allowed execution time."));
+    }
     set_tag("timeout");
     wrap_monitoring = true;
     siglongjmp(segv_jmp, 1);
@@ -184,6 +196,7 @@ void sandbox_end()
 
     // ... and looking for a double free warning
     char buf[BUFSIZ];
+    memset(buf, 0, sizeof(buf)); // Initialize to prevent non-NULL-terminated strings
     int n;
     while ((n = read(pipe_stdout[0], buf, BUFSIZ)) > 0) {
         write(usr_pipe_stdout[1], buf, n);
@@ -343,12 +356,12 @@ int run_tests(int argc, char *argv[], void *tests[], int nb_tests) {
         if (ret < 0)
             return ret;
 
-        for(int i=0; i < test_metadata.nb_tags; i++) {
-            ret = fprintf(f_out, "%s", test_metadata.tags[i]);
+        for(int j=0; j < test_metadata.nb_tags; j++) {
+            ret = fprintf(f_out, "%s", test_metadata.tags[j]);
             if (ret < 0)
                 return ret;
 
-            if (i != test_metadata.nb_tags - 1) {
+            if (j != test_metadata.nb_tags - 1) {
                 ret = fprintf(f_out, ",");
                 if (ret < 0)
                     return ret;

@@ -76,6 +76,7 @@ struct stats_write_t {
   int called;  // number of times the write system call has been issued
   struct params_read_t last_params; // parameters for the last call issued
   int last_return;   // return value of the last write call issued
+  int last_errno; // last value of errno by the wrte syscall ; used by alarm_handler
 };
 
 struct params_stat_t {
